@@ -23,7 +23,7 @@ A configurable Electron application that renders web content with advanced domai
 
 1. **Clone and install dependencies:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/pilot2254/electron-web-renderer
    cd electron-web-renderer
    npm install
    ```
@@ -104,7 +104,7 @@ The configuration file is automatically created at:
   }
 }
 ```
-**Result**: Only GitHub and its subdomains (api.github.com, docs.github.com) are allowed.
+**Result**: Only GitHub and its subdomains (api.github.com, docs.github.com, etc.) are allowed.
 
 #### 2. Development Tools
 ```json
@@ -147,7 +147,7 @@ The configuration file is automatically created at:
   }
 }
 ```
-**Result**: Only exact GitHub domain allowed, all social media blocked, no subdomains.
+**Result**: Only exact GitHub domain allowed, all social media blocked, and no subdomains.
 
 #### 4. Unrestricted Mode
 ```json
