@@ -1,0 +1,51 @@
+{
+  "name": "electron-web-renderer",
+  "version": "1.0.0",
+  "description": "A configurable Electron app that renders web content",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "npm run build && electron . --dev",
+    "build": "tsc",
+    "build:watch": "tsc -w",
+    "dev:watch": "concurrently \"npm run build:watch\" \"wait-on dist/main/main.js && electron . --dev\"",
+    "lint": "eslint -c .eslintrc --ext .ts ./src",
+    "lint:fix": "eslint -c .eslintrc --ext .ts ./src --fix",
+    "clean": "rimraf dist",
+    "rebuild": "npm run clean && npm run build",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:all": "npm run build && electron-builder -mwl"
+  },
+  "author": "pilot2254",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "concurrently": "^8.2.2",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.56.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.pilot2254.webrenderer",
+    "productName": "Web Renderer",
+    "files": ["dist/**/*", "package.json"],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
