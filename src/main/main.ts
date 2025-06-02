@@ -1,12 +1,14 @@
-import { app, BrowserWindow, shell, ipcMain } from "electron"
+import { app, BrowserWindow, shell, ipcMain, type Event } from "electron"
 import * as path from "path"
 import * as fs from "fs"
-import { type Config, loadConfig, getConfigPath } from "./config"
+// Updated imports:
+import type { Config } from "./config-types"
+import { loadConfiguration, getConfigPath } from "./config-manager"
 
 // Keep a global reference of the window object to avoid garbage collection
 let mainWindow: BrowserWindow | null = null
 
-// Load configuration
+// Configuration object, will be populated by loadConfiguration
 let config: Config
 
 // Set up IPC handlers
@@ -16,76 +18,82 @@ function setupIpcHandlers() {
   })
 
   ipcMain.handle("get-config-path", () => {
+    // Use app.getPath('userData') which is available after app is ready
     return getConfigPath(app.getPath("userData"))
   })
 
   ipcMain.handle("reload-config", async () => {
-    config = await loadConfig(app.getPath("userData"))
+    console.log("Reloading configuration via IPC...")
+    config = await loadConfiguration(app.getPath("userData"))
+    // Potentially notify the window to re-render or apply new settings
+    if (mainWindow) {
+      // Example: Reload the current page if URL changed, or apply other settings
+      // For simplicity, we might just log or require a restart for some changes.
+      // mainWindow.loadURL(config.target.url); // Be careful with this, might be disruptive
+    }
     return config
   })
 }
 
-// Add this function after the imports and before createWindow
-function isDomainAllowed(url: string, config: Config): boolean {
+function isDomainAllowed(url: string, currentConfig: Config): boolean {
   try {
     const urlObj = new URL(url)
     const domain = urlObj.hostname.toLowerCase()
 
-    // If domain restriction is disabled, allow everything
-    if (!config.target.restrictToDomain) {
-      return true
+    if (!currentConfig.target.restrictToDomain) {
+      return true // Restriction disabled
     }
 
-    const domainConfig = config.target.domainConfig
+    const domainSettings = currentConfig.target.domainConfig
 
-    // Check blocked domains first (takes precedence)
-    if (domainConfig.blockedDomains.length > 0) {
-      for (const blockedDomain of domainConfig.blockedDomains) {
-        const normalizedBlocked = blockedDomain.toLowerCase()
-        if (
-          domain === normalizedBlocked ||
-          (domainConfig.allowSubdomains && domain.endsWith("." + normalizedBlocked))
-        ) {
-          console.log(`Domain ${domain} is in blocked list`)
-          return false
-        }
-      }
+    // Check blocked domains first
+    if (
+      domainSettings.blockedDomains.some(
+        (blocked) =>
+          domain === blocked.toLowerCase() ||
+          (domainSettings.allowSubdomains && domain.endsWith(`.${blocked.toLowerCase()}`)),
+      )
+    ) {
+      console.log(`Domain ${domain} is explicitly blocked.`)
+      return false
     }
 
-    // If no allowed domains specified, allow the original domain only
-    if (domainConfig.allowedDomains.length === 0) {
-      const originalDomain = new URL(config.target.url).hostname.toLowerCase()
-      const isAllowed =
-        domain === originalDomain || (domainConfig.allowSubdomains && domain.endsWith("." + originalDomain))
-      console.log(`No allowed domains specified, checking against original domain ${originalDomain}: ${isAllowed}`)
-      return isAllowed
+    // If allowedDomains is empty, only the initial target URL's domain is allowed
+    if (domainSettings.allowedDomains.length === 0) {
+      const initialDomain = new URL(currentConfig.target.url).hostname.toLowerCase()
+      const isInitial =
+        domain === initialDomain || (domainSettings.allowSubdomains && domain.endsWith(`.${initialDomain}`))
+      if (isInitial) console.log(`Domain ${domain} matches initial target domain.`)
+      else console.log(`Domain ${domain} does not match initial target domain (no other allowed domains).`)
+      return isInitial
     }
 
     // Check allowed domains
-    for (const allowedDomain of domainConfig.allowedDomains) {
-      const normalizedAllowed = allowedDomain.toLowerCase()
-      if (domain === normalizedAllowed || (domainConfig.allowSubdomains && domain.endsWith("." + normalizedAllowed))) {
-        console.log(`Domain ${domain} is in allowed list`)
-        return true
-      }
+    if (
+      domainSettings.allowedDomains.some(
+        (allowed) =>
+          domain === allowed.toLowerCase() ||
+          (domainSettings.allowSubdomains && domain.endsWith(`.${allowed.toLowerCase()}`)),
+      )
+    ) {
+      console.log(`Domain ${domain} is in the allowed list.`)
+      return true
     }
 
-    console.log(`Domain ${domain} is not in allowed list`)
+    console.log(`Domain ${domain} is not in the allowed list and not the initial target domain.`)
     return false
   } catch (error) {
-    console.error("Error checking domain:", error)
-    return false
+    console.error("Error in isDomainAllowed:", error)
+    return false // Default to not allowed in case of error
   }
 }
 
 async function createWindow() {
   try {
-    // Load config before creating the window
-    console.log("Loading configuration...")
-    config = await loadConfig(app.getPath("userData"))
-    console.log("Configuration loaded successfully")
+    console.log("Loading configuration for window creation...")
+    config = await loadConfiguration(app.getPath("userData")) // Use the new loader
+    console.log("Configuration loaded successfully for window creation.")
 
-    // Create the browser window with config settings
     mainWindow = new BrowserWindow({
       width: config.window.width,
       height: config.window.height,
@@ -94,114 +102,101 @@ async function createWindow() {
       title: config.app.title,
       icon: config.app.iconPath ? path.resolve(config.app.iconPath) : undefined,
       webPreferences: {
-        preload: path.join(__dirname, "../preload/preload.js"),
+        preload: path.join(__dirname, "../preload/preload.js"), // Adjusted path
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
       },
     })
 
-    // Set additional window options from config
-    if (config.window.maximized) {
-      mainWindow.maximize()
-    }
+    if (config.window.maximized) mainWindow.maximize()
+    if (config.window.fullscreen) mainWindow.setFullScreen(true)
 
-    if (config.window.fullscreen) {
-      mainWindow.setFullScreen(true)
-    }
-
-    // Load the target URL with error handling
-    console.log(`Loading URL: ${config.target.url}`)
-
+    console.log(`Attempting to load URL: ${config.target.url}`)
     try {
       await mainWindow.loadURL(config.target.url)
-      console.log("URL loaded successfully")
+      console.log("URL loaded successfully.")
     } catch (loadError) {
-      console.error("Failed to load URL:", loadError)
-      // Load a fallback page or show an error
-      mainWindow.loadFile(path.join(__dirname, "../renderer/error.html"))
+      console.error("Failed to load target URL:", loadError)
+      mainWindow.loadFile(path.join(__dirname, "../renderer/error.html")) // Adjusted path
     }
 
-    // Set up navigation restrictions if enabled
-    if (config.target.restrictToDomain) {
-      console.log("Domain restriction enabled with configuration:", config.target.domainConfig)
-
-      mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
-        if (!isDomainAllowed(navigationUrl, config)) {
-          event.preventDefault()
-          shell.openExternal(navigationUrl)
-          console.log(`Blocked navigation to ${navigationUrl}, opened in external browser`)
-        } else {
-          console.log(`Allowing navigation to ${navigationUrl}`)
-        }
-      })
-
-      // Also handle new window requests
-      mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (config.target.openLinksExternally || !isDomainAllowed(url, config)) {
-          shell.openExternal(url)
-          console.log(`Opening ${url} in external browser`)
-          return { action: "deny" }
-        }
-        console.log(`Allowing ${url} to open in app`)
-        return { action: "allow" }
-      })
-    } else {
-      console.log("Domain restriction disabled")
-      // Original behavior when domain restriction is disabled
-      mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (config.target.openLinksExternally) {
-          shell.openExternal(url)
-          return { action: "deny" }
-        }
-        return { action: "allow" }
-      })
+    // Navigation handling
+    const handleNavigation = (urlToNavigate: string, event?: Event) => {
+      if (!isDomainAllowed(urlToNavigate, config)) {
+        if (event) event.preventDefault()
+        shell.openExternal(urlToNavigate)
+        console.log(`Blocked navigation to ${urlToNavigate}, opened in external browser.`)
+        return false // Indicate navigation was blocked/redirected
+      }
+      console.log(`Allowing navigation to ${urlToNavigate}.`)
+      return true // Indicate navigation is allowed
     }
 
-    // Handle window close
+    mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+      handleNavigation(navigationUrl, event)
+    })
+
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (config.target.openLinksExternally || !handleNavigation(url)) {
+        shell.openExternal(url) // Ensure external opening if not allowed or configured
+        console.log(`Opening ${url} in external browser due to config or domain restriction.`)
+        return { action: "deny" }
+      }
+      console.log(`Allowing ${url} to open in a new app window.`)
+      return { action: "allow" } // Or configure new window options
+    })
+
     mainWindow.on("closed", () => {
       mainWindow = null
     })
 
-    // Apply custom CSS if specified
     if (config.target.injectCSS && config.target.cssPath) {
       try {
-        const cssContent = fs.readFileSync(path.resolve(config.target.cssPath), "utf8")
-        mainWindow.webContents.insertCSS(cssContent)
-        console.log("Custom CSS injected successfully")
+        const cssPathResolved = path.resolve(config.target.cssPath) // Ensure path is absolute if relative
+        if (fs.existsSync(cssPathResolved)) {
+          const cssContent = fs.readFileSync(cssPathResolved, "utf8")
+          mainWindow.webContents.insertCSS(cssContent)
+          console.log("Custom CSS injected successfully.")
+        } else {
+          console.warn(`Custom CSS file not found at: ${cssPathResolved}`)
+        }
       } catch (error) {
         console.error("Failed to inject CSS:", error)
       }
     }
 
-    // Show developer tools if enabled
     if (config.app.openDevTools) {
       mainWindow.webContents.openDevTools()
     }
   } catch (error) {
-    console.error("Error creating window:", error)
+    console.error("Critical error during createWindow:", error)
+    // Consider showing an error dialog to the user before quitting
     app.quit()
   }
 }
 
-// Set up IPC handlers before app is ready
-setupIpcHandlers()
-
-// Create window when Electron is ready
-app.whenReady().then(() => {
+// Ensure setupIpcHandlers is called once app is ready or before window creation
+app.on("ready", () => {
+  setupIpcHandlers() // Call it here to ensure app paths are available
   createWindow()
-
-  app.on("activate", () => {
-    // On macOS it's common to re-create a window when the dock icon is clicked
-    if (mainWindow === null) {
-      createWindow()
-    }
-  })
 })
 
-// Quit when all windows are closed, except on macOS
+app.on("activate", () => {
+  if (mainWindow === null && app.isReady()) {
+    // Ensure app is ready before creating window
+    createWindow()
+  }
+})
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit()
   }
+})
+
+// Handle potential unhandled promise rejections
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason)
+  // Application specific logging, throwing an error, or other logic here
 })
