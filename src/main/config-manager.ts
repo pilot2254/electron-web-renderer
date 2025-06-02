@@ -11,51 +11,64 @@ export function getConfigPath(userDataPath: string): string {
 }
 
 // Validate the structure and types of the loaded configuration object
-function validateConfigStructure(config: any): config is Config {
-  if (!config || typeof config !== "object") {
-    console.warn("Config validation failed: Not an object.")
+function validateConfigStructure(config: unknown): config is Config {
+  if (!config || typeof config !== "object" || config === null) {
+    console.warn("Config validation failed: Not a non-null object.")
     return false
   }
+
+  const potentialConfig = config as Record<string, unknown>
 
   // Check top-level sections
   const sections: Array<keyof Config> = ["app", "window", "target"]
   for (const section of sections) {
-    if (!config[section] || typeof config[section] !== "object") {
-      console.warn(`Config validation failed: Section '${section}' is missing or not an object.`)
+    if (
+      !potentialConfig[section] ||
+      typeof potentialConfig[section] !== "object" ||
+      potentialConfig[section] === null
+    ) {
+      console.warn(`Config validation failed: Section '${section}' is missing or not a non-null object.`)
       return false
     }
   }
 
-  // Check specific properties and types (example for 'app' section)
-  if (typeof config.app.title !== "string" || typeof config.app.openDevTools !== "boolean") {
+  const appConfig = potentialConfig.app as Record<string, unknown>
+  if (typeof appConfig.title !== "string" || typeof appConfig.openDevTools !== "boolean") {
     console.warn("Config validation failed: Invalid types in 'app' section.")
     return false
   }
-  // Add more specific checks for other sections and properties as needed
 
-  // Validate URL format in target section
-  if (typeof config.target.url !== "string") {
+  const targetConfig = potentialConfig.target as Record<string, unknown>
+  if (typeof targetConfig.url !== "string") {
     console.warn("Config validation failed: target.url is not a string.")
     return false
   }
   try {
-    new URL(config.target.url)
+    new URL(targetConfig.url as string)
   } catch (e) {
-    console.warn(`Config validation failed: target.url '${config.target.url}' is not a valid URL.`)
+    console.warn(`Config validation failed: target.url '${targetConfig.url}' is not a valid URL.`)
     return false
   }
 
-  // Validate domainConfig structure
-  if (!config.target.domainConfig || typeof config.target.domainConfig !== "object") {
-    console.warn("Config validation failed: target.domainConfig is missing or not an object.")
+  const domainConfig = targetConfig.domainConfig as Record<string, unknown>
+  if (!domainConfig || typeof domainConfig !== "object" || domainConfig === null) {
+    console.warn("Config validation failed: target.domainConfig is missing or not a non-null object.")
     return false
   }
   if (
-    !Array.isArray(config.target.domainConfig.allowedDomains) ||
-    !Array.isArray(config.target.domainConfig.blockedDomains) ||
-    typeof config.target.domainConfig.allowSubdomains !== "boolean"
+    !Array.isArray(domainConfig.allowedDomains) ||
+    !Array.isArray(domainConfig.blockedDomains) ||
+    typeof domainConfig.allowSubdomains !== "boolean"
   ) {
     console.warn("Config validation failed: Invalid structure or types in target.domainConfig.")
+    return false
+  }
+  // Ensure array elements are strings for domain lists
+  if (
+    !domainConfig.allowedDomains.every((item) => typeof item === "string") ||
+    !domainConfig.blockedDomains.every((item) => typeof item === "string")
+  ) {
+    console.warn("Config validation failed: Domain lists must contain only strings.")
     return false
   }
 
@@ -70,10 +83,11 @@ function mergeConfig(userConf: Partial<Config>): Config {
   for (const sectionKey of Object.keys(defaultConfig) as Array<keyof Config>) {
     if (userConf[sectionKey]) {
       for (const propKey of Object.keys(defaultConfig[sectionKey])) {
-        if (userConf[sectionKey]![propKey as keyof (typeof userConf)[typeof sectionKey]] !== undefined) {
-          // @ts-ignore
+        const userSection = userConf[sectionKey]
+        if (userSection && userSection[propKey as keyof typeof userSection] !== undefined) {
+          // @ts-expect-error This dynamic assignment is tricky for TS but correct for deep merge
           merged[sectionKey][propKey as keyof (typeof merged)[typeof sectionKey]] =
-            userConf[sectionKey]![propKey as keyof (typeof userConf)[typeof sectionKey]]
+            userSection[propKey as keyof typeof userSection]
         }
       }
     }
@@ -128,29 +142,35 @@ export async function loadConfiguration(userDataPath: string): Promise<Config> {
     if (fs.existsSync(configFilePath)) {
       console.log(`Loading configuration from: ${configFilePath}`)
       const configData = fs.readFileSync(configFilePath, "utf8")
-      let userConfig: any
+      let userConfigFromFile: unknown // Use unknown for initial parsing
 
       try {
-        userConfig = JSON.parse(configData)
-        // Remove helper fields before validation and merging
-        if (userConfig._comment) delete userConfig._comment
-        if (userConfig._instructions) delete userConfig._instructions
+        userConfigFromFile = JSON.parse(configData)
 
-        console.log("Parsed user configuration:", JSON.stringify(userConfig, null, 2))
+        let tempConfig: Record<string, unknown> = {}
+        if (typeof userConfigFromFile === "object" && userConfigFromFile !== null) {
+          tempConfig = { ...userConfigFromFile } // Shallow copy to modify
+        }
+
+        // Remove helper fields before validation and merging
+        if (tempConfig._comment) delete tempConfig._comment
+        if (tempConfig._instructions) delete tempConfig._instructions
+
+        console.log("Parsed user configuration (after removing comments):", JSON.stringify(tempConfig, null, 2))
+
+        // Now validate the cleaned structure
+        if (validateConfigStructure(tempConfig)) {
+          const merged = mergeConfig(tempConfig as Partial<Config>) // Cast after validation
+          console.log("Using merged configuration:", JSON.stringify(merged, null, 2))
+          return merged
+        } else {
+          console.warn("Invalid configuration structure after parsing. Backing up and creating new default config.")
+          fs.copyFileSync(configFilePath, `${configFilePath}.bak-${Date.now()}`)
+          await createDefaultConfigFile(configFilePath)
+          return defaultConfig
+        }
       } catch (parseError) {
         console.error("Invalid JSON in configuration file. Backing up and creating new default config.", parseError)
-        // Optionally, backup the malformed config file
-        fs.copyFileSync(configFilePath, `${configFilePath}.bak-${Date.now()}`)
-        await createDefaultConfigFile(configFilePath)
-        return defaultConfig
-      }
-
-      if (validateConfigStructure(userConfig)) {
-        const merged = mergeConfig(userConfig)
-        console.log("Using merged configuration:", JSON.stringify(merged, null, 2))
-        return merged
-      } else {
-        console.warn("Invalid configuration structure. Backing up and creating new default config.")
         fs.copyFileSync(configFilePath, `${configFilePath}.bak-${Date.now()}`)
         await createDefaultConfigFile(configFilePath)
         return defaultConfig
@@ -162,7 +182,6 @@ export async function loadConfiguration(userDataPath: string): Promise<Config> {
     }
   } catch (error) {
     console.error("Error loading configuration:", error)
-    // Fallback to default config in case of any other errors
     return defaultConfig
   }
 }
