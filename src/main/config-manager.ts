@@ -63,7 +63,6 @@ function validateConfigStructure(config: unknown): config is Config {
     console.warn("Config validation failed: Invalid structure or types in target.domainConfig.")
     return false
   }
-  // Ensure array elements are strings for domain lists
   if (
     !domainConfig.allowedDomains.every((item) => typeof item === "string") ||
     !domainConfig.blockedDomains.every((item) => typeof item === "string")
@@ -72,12 +71,19 @@ function validateConfigStructure(config: unknown): config is Config {
     return false
   }
 
+  // Validate cssPaths if it exists
+  if (targetConfig.cssPaths !== undefined) {
+    if (!Array.isArray(targetConfig.cssPaths) || !targetConfig.cssPaths.every((item) => typeof item === "string")) {
+      console.warn("Config validation failed: target.cssPaths must be an array of strings.")
+      return false
+    }
+  }
+
   return true
 }
 
 // Safely merge user configuration with default configuration
 function mergeConfig(userConf: Partial<Config>): Config {
-  // Deep merge ensuring all nested objects are handled
   const merged: Config = JSON.parse(JSON.stringify(defaultConfig)) // Deep clone defaults
 
   for (const sectionKey of Object.keys(defaultConfig) as Array<keyof Config>) {
@@ -85,19 +91,23 @@ function mergeConfig(userConf: Partial<Config>): Config {
       for (const propKey of Object.keys(defaultConfig[sectionKey])) {
         const userSection = userConf[sectionKey]
         if (userSection && userSection[propKey as keyof typeof userSection] !== undefined) {
-          // @ts-expect-error This dynamic assignment is tricky for TS but correct for deep merge
           merged[sectionKey][propKey as keyof (typeof merged)[typeof sectionKey]] =
             userSection[propKey as keyof typeof userSection]
         }
       }
     }
   }
-  // Ensure domainConfig is properly merged if it exists in userConf
   if (userConf.target?.domainConfig) {
     merged.target.domainConfig = {
       ...defaultConfig.target.domainConfig,
       ...userConf.target.domainConfig,
     }
+  }
+  // Ensure cssPaths is properly merged if it exists in userConf
+  // If userConf.target.cssPaths is explicitly set (even to an empty array), use it.
+  // Otherwise, if it's undefined in userConf, the default will be kept.
+  if (userConf.target && userConf.target.cssPaths !== undefined) {
+    merged.target.cssPaths = userConf.target.cssPaths
   }
 
   return merged
@@ -122,7 +132,9 @@ async function createDefaultConfigFile(configFilePath: string): Promise<void> {
           blockedDomains: "List of domains that should always open externally (takes precedence over allowedDomains)",
           allowSubdomains: "If true, subdomains of allowed domains are also permitted (e.g., api.github.com)",
         },
-        injectCSS: "If true, inject custom CSS from the specified cssPath",
+        injectCSS: "If true, inject custom CSS from the specified cssPaths",
+        cssPaths:
+          "An array of paths to custom CSS files to inject (e.g., ['./assets/theme.css', './assets/tweaks.css'])",
       },
       ...defaultConfig,
     }
@@ -152,15 +164,13 @@ export async function loadConfiguration(userDataPath: string): Promise<Config> {
           tempConfig = { ...userConfigFromFile } // Shallow copy to modify
         }
 
-        // Remove helper fields before validation and merging
         if (tempConfig._comment) delete tempConfig._comment
         if (tempConfig._instructions) delete tempConfig._instructions
 
         console.log("Parsed user configuration (after removing comments):", JSON.stringify(tempConfig, null, 2))
 
-        // Now validate the cleaned structure
         if (validateConfigStructure(tempConfig)) {
-          const merged = mergeConfig(tempConfig as Partial<Config>) // Cast after validation
+          const merged = mergeConfig(tempConfig as Partial<Config>)
           console.log("Using merged configuration:", JSON.stringify(merged, null, 2))
           return merged
         } else {

@@ -151,18 +151,26 @@ async function createWindow() {
       mainWindow = null
     })
 
-    if (config.target.injectCSS && config.target.cssPath) {
-      try {
-        const cssPathResolved = path.resolve(config.target.cssPath) // Ensure path is absolute if relative
-        if (fs.existsSync(cssPathResolved)) {
-          const cssContent = fs.readFileSync(cssPathResolved, "utf8")
-          mainWindow.webContents.insertCSS(cssContent)
-          console.log("Custom CSS injected successfully.")
+    // Inject multiple CSS files if configured
+    if (config.target.injectCSS && config.target.cssPaths && config.target.cssPaths.length > 0) {
+      console.log(`Attempting to inject ${config.target.cssPaths.length} CSS file(s).`)
+      for (const cssPath of config.target.cssPaths) {
+        if (typeof cssPath === "string" && cssPath.trim() !== "") {
+          try {
+            const cssPathResolved = path.resolve(cssPath.trim())
+            if (fs.existsSync(cssPathResolved)) {
+              const cssContent = fs.readFileSync(cssPathResolved, "utf8")
+              await mainWindow.webContents.insertCSS(cssContent) // Use await for insertCSS
+              console.log(`Successfully injected CSS from: ${cssPathResolved}`)
+            } else {
+              console.warn(`Custom CSS file not found at: ${cssPathResolved}`)
+            }
+          } catch (error) {
+            console.error(`Failed to inject CSS from ${cssPath}:`, error)
+          }
         } else {
-          console.warn(`Custom CSS file not found at: ${cssPathResolved}`)
+          console.warn(`Invalid or empty CSS path found in cssPaths array: '${cssPath}'`)
         }
-      } catch (error) {
-        console.error("Failed to inject CSS:", error)
       }
     }
 

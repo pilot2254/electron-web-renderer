@@ -25,8 +25,8 @@ export interface Config {
       blockedDomains: string[] // List of domains explicitly blocked (will always open externally, takes precedence over allowedDomains)
       allowSubdomains: boolean // If true, subdomains of entries in allowedDomains are also permitted (e.g., "sub.example.com")
     }
-    injectCSS: boolean // If true, custom CSS from cssPath will be injected into the loaded page
-    cssPath?: string // Optional path to a custom CSS file to inject
+    injectCSS: boolean // If true, custom CSS from cssPaths will be injected into the loaded page
+    cssPaths?: string[] // Optional array of paths to custom CSS files to inject
   }
 }
 
@@ -37,7 +37,7 @@ export const defaultConfig: Config = {
     // Application-specific settings
     title: "My Web App Viewer (Dev Mode)", // Window title, clearly indicating it's a showcase
     iconPath: "./assets/app-icon.png", // Example path: ensure this file exists or remove/update path
-    openDevTools: true, // Open developer tools by default for this showcase config
+    openDevTools: false, // Open developer tools by default or no
   },
   window: {
     // Window behavior and appearance settings
@@ -68,6 +68,9 @@ export const defaultConfig: Config = {
       allowSubdomains: true, // Allow subdomains of `allowedDomains` (e.g., `gist.github.com` would be allowed)
     },
     injectCSS: true, // Enable CSS injection for this showcase
-    cssPath: "./assets/custom-styles.css", // Example path: ensure this file exists or remove/update path
+    cssPaths: [
+      "./assets/examples/highlight.css", // Example: A global text selection color
+      "./assets/site-specific-tweaks.css", // Example: Styles specific to the target URL
+    ], // Example paths: ensure these files exist or remove/update paths
   },
 }
