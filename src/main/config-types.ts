@@ -25,8 +25,7 @@ export interface Config {
       blockedDomains: string[] // List of domains explicitly blocked (will always open externally, takes precedence over allowedDomains)
       allowSubdomains: boolean // If true, subdomains of entries in allowedDomains are also permitted (e.g., "sub.example.com")
     }
-    injectCSS: boolean // If true, custom CSS from cssPaths will be injected into the loaded page
-    cssPaths?: string[] // Optional array of paths to custom CSS files to inject
+    // Removed injectCSS and cssPaths
   }
 }
 
@@ -35,9 +34,9 @@ export interface Config {
 export const defaultConfig: Config = {
   app: {
     // Application-specific settings
-    title: "My Web App Viewer (Dev Mode)", // Window title, clearly indicating it's a showcase
+    title: "Electron Web Renderer", // Window title
     iconPath: "./assets/app-icon.png", // Example path: ensure this file exists or remove/update path
-    openDevTools: false, // Open developer tools by default or no
+    openDevTools: false, // Open developer tools by default for this showcase config
   },
   window: {
     // Window behavior and appearance settings
@@ -56,10 +55,10 @@ export const defaultConfig: Config = {
     domainConfig: {
       // Configuration for domain restriction
       allowedDomains: [
-        "github.com", // Allow navigation within github.com
-        "githubusercontent.com", // Often needed for GitHub assets like images
+        "github.com",
+        "githubusercontent.com",
         "docs.github.com", // Example of allowing a specific subdomain directly
-        "pilot2254.github.io", // Allow navigation to the user's GitHub Pages
+        "pilot2254.github.io",
       ],
       blockedDomains: [
         "ads.example.com", // Example: explicitly block an ad domain even if it's a subdomain of an allowed one (if allowSubdomains is true)
@@ -67,10 +66,6 @@ export const defaultConfig: Config = {
       ],
       allowSubdomains: true, // Allow subdomains of `allowedDomains` (e.g., `gist.github.com` would be allowed)
     },
-    injectCSS: true, // Enable CSS injection for this showcase
-    cssPaths: [
-      "./assets/examples/highlight.css", // Example: A global text selection color
-      "./assets/site-specific-tweaks.css", // Example: Styles specific to the target URL
-    ], // Example paths: ensure these files exist or remove/update paths
+    // Removed injectCSS and cssPaths
   },
 }

@@ -1,9 +1,0 @@
-::-moz-selection { /* Code for Firefox */
-  color: #00ffaa;
-  background: #00ffaa80;
-}
-
-::selection {
-  color: #00ffaa;
-  background: #00ffaa80;
-}

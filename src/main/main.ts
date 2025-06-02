@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, type Event } from "electron"
 import * as path from "path"
-import * as fs from "fs"
-// Updated imports:
+// Removed fs import as it's no longer needed here after removing CSS injection
+// import * as fs from "fs";
 import type { Config } from "./config-types"
 import { loadConfiguration, getConfigPath } from "./config-manager"
 
@@ -151,28 +151,7 @@ async function createWindow() {
       mainWindow = null
     })
 
-    // Inject multiple CSS files if configured
-    if (config.target.injectCSS && config.target.cssPaths && config.target.cssPaths.length > 0) {
-      console.log(`Attempting to inject ${config.target.cssPaths.length} CSS file(s).`)
-      for (const cssPath of config.target.cssPaths) {
-        if (typeof cssPath === "string" && cssPath.trim() !== "") {
-          try {
-            const cssPathResolved = path.resolve(cssPath.trim())
-            if (fs.existsSync(cssPathResolved)) {
-              const cssContent = fs.readFileSync(cssPathResolved, "utf8")
-              await mainWindow.webContents.insertCSS(cssContent) // Use await for insertCSS
-              console.log(`Successfully injected CSS from: ${cssPathResolved}`)
-            } else {
-              console.warn(`Custom CSS file not found at: ${cssPathResolved}`)
-            }
-          } catch (error) {
-            console.error(`Failed to inject CSS from ${cssPath}:`, error)
-          }
-        } else {
-          console.warn(`Invalid or empty CSS path found in cssPaths array: '${cssPath}'`)
-        }
-      }
-    }
+    // Removed CSS injection logic block from here
 
     if (config.app.openDevTools) {
       mainWindow.webContents.openDevTools()

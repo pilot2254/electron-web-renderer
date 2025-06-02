@@ -71,13 +71,7 @@ function validateConfigStructure(config: unknown): config is Config {
     return false
   }
 
-  // Validate cssPaths if it exists
-  if (targetConfig.cssPaths !== undefined) {
-    if (!Array.isArray(targetConfig.cssPaths) || !targetConfig.cssPaths.every((item) => typeof item === "string")) {
-      console.warn("Config validation failed: target.cssPaths must be an array of strings.")
-      return false
-    }
-  }
+  // Removed validation for cssPaths and injectCSS
 
   return true
 }
@@ -103,12 +97,7 @@ function mergeConfig(userConf: Partial<Config>): Config {
       ...userConf.target.domainConfig,
     }
   }
-  // Ensure cssPaths is properly merged if it exists in userConf
-  // If userConf.target.cssPaths is explicitly set (even to an empty array), use it.
-  // Otherwise, if it's undefined in userConf, the default will be kept.
-  if (userConf.target && userConf.target.cssPaths !== undefined) {
-    merged.target.cssPaths = userConf.target.cssPaths
-  }
+  // Removed merging logic for cssPaths and injectCSS
 
   return merged
 }
@@ -132,9 +121,7 @@ async function createDefaultConfigFile(configFilePath: string): Promise<void> {
           blockedDomains: "List of domains that should always open externally (takes precedence over allowedDomains)",
           allowSubdomains: "If true, subdomains of allowed domains are also permitted (e.g., api.github.com)",
         },
-        injectCSS: "If true, inject custom CSS from the specified cssPaths",
-        cssPaths:
-          "An array of paths to custom CSS files to inject (e.g., ['./assets/theme.css', './assets/tweaks.css'])",
+        // Removed instructions for injectCSS and cssPaths
       },
       ...defaultConfig,
     }
